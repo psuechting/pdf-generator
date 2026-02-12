@@ -11,11 +11,13 @@ from pathlib import Path
 
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
+from reportlab.lib.utils import simpleSplit
 
 from config.branding import (
     brand_blue,
     brand_dark,
     font_name,
+    font_size_body,
     font_size_label,
 )
 from config.settings import get_logos_path, page_size, default_margin
@@ -41,28 +43,25 @@ LABEL_BASELINE_OFFSET = ROW_STEP / 2 + font_size_label / 2  # center 9pt label i
 
 
 def _draw_logos(c: canvas.Canvas, y: float) -> float:
-    """Draw up to two logos from assets/logos side by side. Return new y below logos."""
+    """Draw up to two logos from assets/logos side by side. Return new y below logos.
+    If no logo images exist, draw placeholders so layout is reserved.
+    """
     from reportlab.lib.utils import ImageReader
 
-    logos_dir = get_logos_path()
-    if not logos_dir.exists():
-        LOG.debug("Logos directory not found: %s", logos_dir)
-        return y
-    paths = []
-    for ext in ("png", "jpg", "jpeg"):
-        for path in sorted(logos_dir.glob(f"*.{ext}")):
-            paths.append(path)
-            if len(paths) >= 2:
-                break
-        if len(paths) >= 2:
-            break
-    if not paths:
-        LOG.debug("No logo image found in %s", logos_dir)
-        return y
     logo_h = 79.2  # 1.1 inch
     half_w = CONTENT_WIDTH / 2
+    paths = []
+    logos_dir = get_logos_path()
+    if logos_dir.exists():
+        for ext in ("png", "jpg", "jpeg"):
+            for path in sorted(logos_dir.glob(f"*.{ext}")):
+                paths.append(path)
+                if len(paths) >= 2:
+                    break
+            if len(paths) >= 2:
+                break
     x = default_margin
-    for path in paths[:2]:
+    for i, path in enumerate(paths[:2]):
         try:
             img = ImageReader(str(path))
             w, h = img.getSize()
@@ -73,6 +72,17 @@ def _draw_logos(c: canvas.Canvas, y: float) -> float:
         except Exception as e:
             LOG.warning("Could not draw logo %s: %s", path, e)
         x += half_w
+    # If no logos were drawn, reserve space with placeholders so title position is consistent
+    if not paths:
+        placeholder_h = min(logo_h, 36)
+        for slot in range(2):
+            px = default_margin + slot * half_w + (half_w - 60) / 2
+            c.setFillColor(colors.HexColor("#f1f5f9"))
+            c.rect(px, y - placeholder_h, 60, placeholder_h, stroke=1, fill=1)
+            c.setStrokeColor(CELL_BORDER)
+            c.setFillColor(brand_dark)
+            c.setFont(font_name, 8)
+            c.drawCentredString(px + 30, y - placeholder_h / 2 - 3, "Logo")
     return y - logo_h
 
 
@@ -153,24 +163,26 @@ def _section_fields(
     x: float,
     y: float,
     width: float,
-    title: str,
+    title: str | None,
     rows: list[tuple[str, str, str]],
     fillable: bool = True,
 ) -> float:
-    """Draw a section: full outer box with title, then label + value cells inside.
+    """Draw a section: full outer box with optional title, then label + value cells inside.
     Each row is (label, field_name, kind) with kind 'text' or 'checkbox'.
     If fillable, value cells are AcroForm fields; else blank placeholder cells.
     Returns bottom y.
     """
     n = len(rows)
-    section_h = 22.0 + n * ROW_STEP
+    has_title = title is not None
+    title_bar_h = 22.0 if has_title else 0.0
+    section_h = title_bar_h + n * ROW_STEP
     bottom_y = boxed_section(c, x, y, width, section_h, title)
     value_width = width - VALUE_X_OFFSET - 6  # keep 6pt from right edge of box
 
-    # Content area: from below title bar (inner_top) down by n rows
-    inner_top = y - 22.0
+    # Content area: from below title bar (or top of box if no title) down by n rows
+    inner_top = y - title_bar_h
     table_bottom = inner_top - n * ROW_STEP  # bottom line of table
-    row_y = inner_top - 4.0  # first row baseline (4pt below top of content)
+    row_y = inner_top  # first row top: align content with grid so fields sit inside cells
 
     # Vertical divider: label column | value column (only through table height)
     c.setStrokeColor(CELL_BORDER)
@@ -280,12 +292,42 @@ def generate(output_path: Path, **kwargs: object) -> None:
     y -= spacer_height(0.5)
 
     # ----- MEMBERSHIP AUTHORIZATION -----
+    # Draw the MEMBERSHIP AUTHORIZATION section with prominent commitment text
+    section_height = 86  # Space for commitment text + checkbox
+    section_bottom_y = boxed_section(
+        c,
+        default_margin,
+        y,
+        CONTENT_WIDTH,
+        section_height,
+        title="MEMBERSHIP AUTHORIZATION",
+    )
+    commitment_text = (
+        "I commit to my union membership in Local 3922, Portland Community College "
+        "Federation of Classified Employees, AFT-Oregon, American Federation of Teachers, "
+        "AFL-CIO (PCCFCE). I agree to abide by its constitution and bylaws and I authorize "
+        "the union to act as my exclusive representative in collective bargaining over "
+        "wages, benefits, and other terms and conditions of employment with my employer."
+    )
+    text_x = default_margin + 14
+    text_w = CONTENT_WIDTH - 28
+    content_top_y = section_bottom_y + section_height - 22  # below title bar
+    line_height = 13
+    c.setFont(font_name, font_size_body)
+    c.setFillColor(brand_dark)
+    draw_y = content_top_y - line_height
+    for line in simpleSplit(commitment_text, font_name, font_size_body, text_w):
+        c.drawString(text_x, draw_y, line)
+        draw_y -= line_height
+
+    # Commitment checkbox section below the text box
+    y = section_bottom_y - spacer_height(0.5)
     y = _section_fields(
         c,
         default_margin,
         y,
         CONTENT_WIDTH,
-        "MEMBERSHIP AUTHORIZATION",
+        None,
         [
             ("Commitment Confirmed", "commitment_confirmed", "checkbox")
         ],
