@@ -56,6 +56,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only log errors.",
     )
+    parser.add_argument(
+        "--no-fillable",
+        action="store_true",
+        help="Generate static PDF with placeholder cells only (no AcroForm fields).",
+    )
     return parser.parse_args()
 
 
@@ -71,7 +76,7 @@ def _setup_logging(verbose: bool, quiet: bool) -> None:
     )
 
 
-def _run_template(name: str, output_dir: Path) -> bool:
+def _run_template(name: str, output_dir: Path, fillable: bool = True) -> bool:
     """Run one template; return True on success, False on failure."""
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -79,7 +84,7 @@ def _run_template(name: str, output_dir: Path) -> bool:
     try:
         gen = get_generator(name)
         LOG.info("Generating %s -> %s", name, output_path)
-        gen(output_path)
+        gen(output_path, fillable=fillable)
         LOG.info("Wrote %s", output_path)
         return True
     except KeyError as e:
@@ -106,8 +111,10 @@ def main() -> int:
             print(f"  {n}")
         return 0
 
+    fillable = not args.no_fillable
+
     if args.template:
-        ok = _run_template(args.template, output_dir)
+        ok = _run_template(args.template, output_dir, fillable=fillable)
         return 0 if ok else 1
 
     if args.all:
@@ -117,7 +124,7 @@ def main() -> int:
             return 1
         failed = []
         for n in names:
-            if not _run_template(n, output_dir):
+            if not _run_template(n, output_dir, fillable=fillable):
                 failed.append(n)
         if failed:
             LOG.error("Failed templates: %s", ", ".join(failed))

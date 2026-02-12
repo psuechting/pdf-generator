@@ -5,6 +5,7 @@ Uses ReportLab canvas. All units in points.
 
 from typing import Optional
 
+from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 
 from config.branding import brand_blue, brand_dark, font_name, font_size_heading
@@ -54,8 +55,8 @@ def boxed_section(
         c.line(x + width, y, x + width, bottom_y)
         c.line(x, y, x, bottom_y)
         c.line(x, title_bottom, x + width, title_bottom)
-        # Title text
-        c.setFillColor(brand_dark)
+        # Title text (white on blue to match reference)
+        c.setFillColor(colors.white)
         c.setFont(font_name, font_size_heading)
         c.drawCentredString(x + width / 2, title_bottom + 6, title)
 

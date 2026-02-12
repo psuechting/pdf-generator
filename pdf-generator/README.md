@@ -13,9 +13,25 @@ A modular, command-line PDF template generator that runs multiple Python scripts
 
 Requires Python 3.8+.
 
+On many systems (e.g. Debian/Ubuntu), the system Python is "externally managed" and will not allow `pip install` globally. Use a virtual environment instead.
+
+**Virtual environment (recommended):**
+
 ```bash
 cd pdf-generator
-pip install -r requirements.txt
+
+# If venv is not installed (Debian/Ubuntu):
+#   sudo apt install python3.12-venv
+
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+Then run the generator with `.venv/bin/python generator.py ...` or activate the venv first:
+
+```bash
+source .venv/bin/activate
+python generator.py --list
 ```
 
 ## Usage
